@@ -33,7 +33,7 @@ jobs:
         run: |
           ruff check .
           ruff format --check .
-      - name: Test (offline: fake model, fake MCP server, garak's own test probes)
+      - name: "Test (offline: fake model, fake MCP server, garak's own test probes)"
         run: python -m pytest -q -rs
       - name: Smoke run of the CLI (dry run, no network to a model or server)
         run: |
