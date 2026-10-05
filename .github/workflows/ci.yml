@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # garak 0.17 needs Python 3.11; on 3.10 pip resolves garak 0.16 within the pinned range.
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      - name: Versions
+        run: python -m pip show garak mcp | grep -E "^(Name|Version)"
+      - name: Lint
+        run: |
+          ruff check .
+          ruff format --check .
+      - name: Test (offline: fake model, fake MCP server, garak's own test probes)
+        run: python -m pytest -q -rs
+      - name: Smoke run of the CLI (dry run, no network to a model or server)
+        run: |
+          garak-mcp --version
+          garak-mcp doctor --dry-run
+          garak-mcp run --dry-run --probes test.Test --report-dir /tmp/out --fail-on-hit
+          test -s /tmp/out/summary.json
+          grep -q "test.Test" /tmp/out/summary.md
+          ls /tmp/out/garak-mcp.*.report.jsonl /tmp/out/garak-mcp.*.report.html
+          garak-mcp doctor --config examples/config.yaml --dry-run
+
+  container-build:
+    name: Build the container image and run it
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the image, print --help and run the dry-run doctor
+        run: |
+          docker build --build-arg VERSION=ci -t garak-mcp-probes:ci .
+          docker run --rm garak-mcp-probes:ci --help > help.txt && grep "^usage: garak-mcp" help.txt
+          docker run --rm garak-mcp-probes:ci --version
+          test "$(docker run --rm --entrypoint id garak-mcp-probes:ci -u)" = "1000"
+          docker run --rm garak-mcp-probes:ci doctor --dry-run

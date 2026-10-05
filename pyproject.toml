@@ -1,0 +1,93 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "garak-mcp-probes"
+version = "0.1.0"
+description = "Run garak against your MCP servers: a generator that puts garak's probes through an agent using your MCP tools, and detectors that show when a probe makes the agent misuse a tool."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Muhammad Basit Ali" }]
+keywords = [
+  "garak",
+  "mcp",
+  "model-context-protocol",
+  "llm-security",
+  "agent-security",
+  "red-teaming",
+  "tool-use",
+  "evaluation",
+  "ai-agents",
+  "cli",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Information Technology",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Security",
+  "Topic :: Software Development :: Testing",
+  "Typing :: Typed",
+]
+# garak 0.16 and 0.17 share the generator, detector and Attempt interfaces this package uses.
+# garak 0.17 needs Python 3.11, so Python 3.10 resolves to garak 0.16.
+# mcp 2.x is the SDK whose Client and MCPServer APIs are used here (1.x has different names).
+dependencies = [
+  "garak>=0.16.0,<0.18",
+  "mcp>=2.0,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.5",
+]
+
+[project.scripts]
+garak-mcp = "garak_mcp_probes.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/basitalisandhu/garak-mcp-probes"
+Repository = "https://github.com/basitalisandhu/garak-mcp-probes"
+Issues = "https://github.com/basitalisandhu/garak-mcp-probes/issues"
+Changelog = "https://github.com/basitalisandhu/garak-mcp-probes/blob/main/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/garak_mcp_probes"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/garak_mcp_probes/**",
+  "examples/**",
+  "docs/**",
+  "tests/**",
+  "README.md",
+  "LICENSE",
+  "CHANGELOG.md",
+  "pyproject.toml",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["RUF012", "E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
