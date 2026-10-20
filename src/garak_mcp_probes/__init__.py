@@ -6,4 +6,4 @@ tool-call trace the generator attaches to every output. It contains no probes an
 prompts come from the probes of the installed garak.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
