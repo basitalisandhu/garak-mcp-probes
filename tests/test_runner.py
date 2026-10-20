@@ -58,3 +58,68 @@ def test_unknown_probe_is_an_error(tmp_path):
         runner.resolve_probes("no_such_probe_module")
     with pytest.raises(runner.RunError):
         runner.run(make_config(), "no_such_probe_module", tmp_path)
+
+
+def test_probe_detector_names_primary_then_extended():
+    class Probe:
+        primary_detector = "always.Pass"
+        extended_detectors = ["encoding.DecodeApprox", "always.Pass", None]
+
+    class Bare:
+        pass
+
+    assert runner.probe_detector_names(Probe()) == ["always.Pass", "encoding.DecodeApprox"]
+    assert runner.probe_detector_names(Bare()) == []
+
+
+def test_with_probe_detectors_adds_the_probes_text_detector(tmp_path, overrides):
+    cfg = make_config()
+    gen = MCPAgentGenerator(settings=cfg, model=ScriptedModel(["fine"]), server_overrides=overrides)
+    result = runner.run(
+        cfg,
+        "test.Blank",
+        tmp_path,
+        detector_names=["ToolError"],
+        generator=gen,
+        probe_detectors=True,
+    )
+    detectors = result.summary["probes"]["test.Blank"]["detectors"]
+    # test.Blank names any.AnyOutput as its primary detector; it needs no download and fires
+    # on any non-empty output.
+    assert set(detectors) == {"ToolError", "any.AnyOutput"}
+    assert detectors["any.AnyOutput"] == {"scored": 1, "hits": 1}
+    assert result.summary["probe_detectors"] is True
+    assert result.summary["detector_warnings"] == []
+
+
+def test_without_the_flag_only_trace_detectors_run(tmp_path, overrides):
+    cfg = make_config()
+    gen = MCPAgentGenerator(settings=cfg, model=ScriptedModel(["fine"]), server_overrides=overrides)
+    result = runner.run(cfg, "test.Blank", tmp_path, detector_names=["ToolError"], generator=gen)
+    assert list(result.summary["probes"]["test.Blank"]["detectors"]) == ["ToolError"]
+    assert result.summary["probe_detectors"] is False
+
+
+def test_unloadable_probe_detector_is_skipped_with_one_warning(tmp_path, overrides, monkeypatch):
+    from garak.probes.test import Blank
+
+    monkeypatch.setattr(Blank, "primary_detector", "no_such_module.NoSuchDetector")
+    monkeypatch.setattr(Blank, "extended_detectors", ["always.Pass"], raising=False)
+    cfg = make_config()
+    gen = MCPAgentGenerator(settings=cfg, model=ScriptedModel(["fine"]), server_overrides=overrides)
+    result = runner.run(
+        cfg,
+        "test.Blank",
+        tmp_path,
+        detector_names=["ToolError"],
+        generator=gen,
+        probe_detectors=True,
+    )
+    assert set(result.summary["probes"]["test.Blank"]["detectors"]) == {"ToolError", "always.Pass"}
+    assert len(result.detector_warnings) == 1
+    assert result.detector_warnings[0].startswith(
+        "detector no_such_module.NoSuchDetector (named by test.Blank) skipped:"
+    )
+    on_disk = json.loads(result.summary_json.read_text(encoding="utf-8"))
+    assert on_disk["detector_warnings"] == result.detector_warnings
+    assert "Detector warnings:" in result.summary_md.read_text(encoding="utf-8")

@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `garak-mcp run --with-probe-detectors` also runs each probe's own garak text detectors (its `primary_detector` and `extended_detectors`) next to the trace detectors. A detector that cannot load is skipped, logged once and listed under `detector_warnings` in `summary.json` and `summary.md` (#1).
+
+### Fixed
+
+- The OpenAI-compatible client failed the whole run with a `TypeError` when a reply's content parts included one with `"text": null` or no text (an image part, for example); such parts are now skipped.
+- The fake server's `read_note` raised `ValueError` for an unknown note, which the MCP SDK hides from the client as a generic failure and logs with a traceback; it now raises the SDK's `ToolError`, so the model sees `no note named '...'`.
+
+### Changed
+
+- README first screen: who the project is for, a three-line quick start that starts with a virtual environment, and a real dry-run output sample.
+
 ## [0.1.0] - 2026-10-05
 
 ### Added

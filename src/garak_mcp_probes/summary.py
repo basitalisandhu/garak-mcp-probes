@@ -127,6 +127,8 @@ def to_markdown(summary: dict[str, Any]) -> str:
             "",
             "Skipped intent probes: " + ", ".join(f"`{p}`" for p in summary["skipped_probes"]),
         ]
+    if summary.get("detector_warnings"):
+        lines += ["", "Detector warnings:", *(f"- {w}" for w in summary["detector_warnings"])]
     return "\n".join([*lines, ""])
 
 

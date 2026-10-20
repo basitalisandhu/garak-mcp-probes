@@ -104,6 +104,14 @@ def test_markdown_lists_skipped_probes(report):
     assert "Skipped intent probes: `some.IntentProbe`" in s.to_markdown(out)
 
 
+def test_markdown_lists_detector_warnings(report):
+    out = s.summarise(report)
+    out["detector_warnings"] = ["detector x.Y (named by p.Q) skipped: ImportError"]
+    assert "Detector warnings:\n- detector x.Y (named by p.Q) skipped: ImportError" in (
+        s.to_markdown(out)
+    )
+
+
 def test_empty_report(tmp_path):
     out = s.summarise(write_report(tmp_path / "r.jsonl", []))
     assert out["probes"] == {} and "No completed attempts" in s.to_markdown(out)

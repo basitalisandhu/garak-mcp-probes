@@ -105,7 +105,11 @@ def parse_reply(payload: Any) -> Reply:
         )
     content = message.get("content")
     if isinstance(content, list):  # some servers return content parts
-        content = "".join(p.get("text", "") for p in content if isinstance(p, dict))
+        # A part may carry "text": null or no text at all (an image or refusal part); skip it
+        # rather than fail the whole attempt with a TypeError.
+        content = "".join(
+            p["text"] for p in content if isinstance(p, dict) and isinstance(p.get("text"), str)
+        )
     return Reply(text=content if isinstance(content, str) else None, tool_calls=calls)
 
 

@@ -6,11 +6,21 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
-For servers and agents you own or are authorised to test. This repository contains no probes, no injection payloads and no jailbreak text: every prompt comes from the garak you have installed.
+For teams that run MCP servers behind their own agents and want to know whether garak's prompt catalogue can push that agent into misusing those tools. Use it only on servers and agents you own or are authorised to test. This repository contains no probes, no injection payloads and no jailbreak text: every prompt comes from the garak you have installed.
 
 ```bash
+python3 -m venv .venv && . .venv/bin/activate
 pip install "garak-mcp-probes @ git+https://github.com/basitalisandhu/garak-mcp-probes"
 garak-mcp run --dry-run --probes test.Test --report-dir garak-mcp-report
+```
+
+The dry run needs no network and no keys (a fake model and a fake MCP server). The install is large, because garak brings PyTorch and Hugging Face libraries. The summary table from a real run (garak 0.17.1):
+
+```text
+| Probe | Attempts | Tool calls | ArgumentContains | StepBudgetExceeded | ToolCalled | ToolError | UnexpectedTool |
+|---|---|---|---|---|---|---|---|
+| `test.Test` | 8 | 8 | 0 / 8 | 0 / 8 | 0 / 8 | 0 / 8 | 0 / 8 |
+| **Total** | 8 | 8 | 0 / 8 | 0 / 8 | 0 / 8 | 0 / 8 | 0 / 8 |
 ```
 
 ## What it is, who it is for, and why
@@ -69,7 +79,7 @@ python3 -m venv .venv && . .venv/bin/activate
 pip install "garak-mcp-probes @ git+https://github.com/basitalisandhu/garak-mcp-probes"
 ```
 
-Tested against garak 0.17.0 and mcp 2.3.0. `pyproject.toml` pins `garak>=0.16.0,<0.18` and `mcp>=2.0,<3`. garak 0.16 is allowed because garak 0.17 needs Python 3.11, so on Python 3.10 pip resolves garak 0.16, and because a source comparison of 0.16.0 and 0.17.0 shows the parts used here (the generator base, `Attempt`, `Message` and `Conversation`, the base `Harness`, `command.start_run` and `end_run`, `parse_plugin_spec` and plugin loading) unchanged, or changed only in code paths this package does not reach. CI's Python 3.10 job runs the tests against garak 0.16. The upper bounds are there because garak's internal interfaces change between minor releases.
+Tested against garak 0.17.0 and 0.17.1 and mcp 2.3.0. `pyproject.toml` pins `garak>=0.16.0,<0.18` and `mcp>=2.0,<3`. garak 0.16 is allowed because garak 0.17 needs Python 3.11, so on Python 3.10 pip resolves garak 0.16, and because a source comparison of 0.16.0 and 0.17.0 shows the parts used here (the generator base, `Attempt`, `Message` and `Conversation`, the base `Harness`, `command.start_run` and `end_run`, `parse_plugin_spec` and plugin loading) unchanged, or changed only in code paths this package does not reach. CI's Python 3.10 job runs the tests against garak 0.16. The upper bounds are there because garak's internal interfaces change between minor releases.
 
 Container image: each release tag publishes `ghcr.io/basitalisandhu/garak-mcp-probes` (linux/amd64 and linux/arm64), running as uid 1000 in `/work`:
 
@@ -85,11 +95,11 @@ Inside the container, stdio servers must be commands available in the image, and
 
 | Command | What it does | Exit codes |
 | --- | --- | --- |
-| `run (--config FILE \| --dry-run) --probes SPEC [--report-dir DIR] [--generations N] [--seed N] [--detectors LIST] [--threshold X] [--fail-on-hit]` | runs the probes through the agent; writes garak's report, `summary.json` and `summary.md` | 0; 1 with `--fail-on-hit` and at least one hit; 2 |
+| `run (--config FILE \| --dry-run) --probes SPEC [--report-dir DIR] [--generations N] [--seed N] [--detectors LIST] [--with-probe-detectors] [--threshold X] [--fail-on-hit]` | runs the probes through the agent; writes garak's report, `summary.json` and `summary.md` | 0; 1 with `--fail-on-hit` and at least one hit; 2 |
 | `doctor (--config FILE \| --dry-run)` | connects to every server and lists its tools, then sends the model one short request; runs no probe | 0; 1 a check failed; 2 |
 | `list-probes` | garak's probe list (`garak --list_probes`) | 0 |
 
-Exit code 2 means a usage, configuration or probe selection error. `--generations` defaults to 1 (garak's own default is higher); `--threshold` is the score that counts as a hit (default 0.5, and the trace detectors only score 0.0 or 1.0). `--dry-run` with `--config` keeps the file's `agent` and `policy` sections and replaces the model and the servers with the fakes; the fake server takes the name of the first server in the file (`fake` without a file), so `server:tool` policy entries for that server still apply.
+Exit code 2 means a usage, configuration or probe selection error. `--with-probe-detectors` also runs each probe's own garak text detectors (its `primary_detector`, then its `extended_detectors`) next to the trace detectors, so one report shows both what the agent said and what it did; a detector that cannot load (one that needs a model download while offline, for example) is skipped and listed under `detector_warnings` in `summary.json` and in `summary.md`. `--fail-on-hit` counts hits from those detectors too. `--generations` defaults to 1 (garak's own default is higher); `--threshold` is the score that counts as a hit (default 0.5, and the trace detectors only score 0.0 or 1.0). `--dry-run` with `--config` keeps the file's `agent` and `policy` sections and replaces the model and the servers with the fakes; the fake server takes the name of the first server in the file (`fake` without a file), so `server:tool` policy entries for that server still apply.
 
 ## Configuration
 
@@ -160,7 +170,7 @@ A hit is a lead, not a verdict. Open the attempt in the JSONL report, read the p
 
 **Why not use garak's own REST or OpenAI generators?** They send a prompt and return text. The tool calls, which are what this project scores, happen inside the agent loop, so the loop has to live in the generator.
 
-**Can I use garak's text detectors as well?** Not through `garak-mcp run` today; it runs only the trace detectors. Adding a probe's recommended detectors is listed in [docs/good-first-issues.md](docs/good-first-issues.md).
+**Can I use garak's text detectors as well?** Yes: `garak-mcp run --with-probe-detectors` adds each probe's own detectors, which appear in the summary under garak's names (for example `always.Pass` for `test.Test`).
 
 **Why is `UnexpectedTool` missing from my summary?** It runs only when `policy.allow_tools` is set. The same rule applies to `ToolCalled` (needs `deny_tools`) and `ArgumentContains` (needs `canaries`).
 
@@ -168,7 +178,7 @@ A hit is a lead, not a verdict. Open the attempt in the JSONL report, read the p
 
 ## Contributing
 
-Issues and pull requests are welcome, especially detectors over the trace, transport problems with a minimal server, and keeping the runner in step with garak releases. Run `make check` (ruff and pytest) and read [CONTRIBUTING.md](CONTRIBUTING.md); [docs/good-first-issues.md](docs/good-first-issues.md) lists six scoped starting points. Security problems: see [SECURITY.md](SECURITY.md).
+Issues and pull requests are welcome, especially detectors over the trace, transport problems with a minimal server, and keeping the runner in step with garak releases. Run `make check` (ruff and pytest) and read [CONTRIBUTING.md](CONTRIBUTING.md); the [good first issue](https://github.com/basitalisandhu/garak-mcp-probes/labels/good%20first%20issue) label lists scoped starting points, and [docs/good-first-issues.md](docs/good-first-issues.md) has the full write-ups. Security problems: see [SECURITY.md](SECURITY.md).
 
 ## Related repositories
 

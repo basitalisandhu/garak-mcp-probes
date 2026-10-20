@@ -65,6 +65,12 @@ def build_parser() -> argparse.ArgumentParser:
         "StepBudgetExceeded, ToolError (default: every detector the policy configures)",
     )
     run.add_argument(
+        "--with-probe-detectors",
+        action="store_true",
+        help="also run each probe's own garak text detectors (its primary and extended "
+        "detectors) next to the trace detectors; any that cannot load are skipped with a warning",
+    )
+    run.add_argument(
         "--threshold", type=float, default=0.5, help="score that counts as a hit (default 0.5)"
     )
     run.add_argument(
@@ -107,6 +113,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         seed=args.seed,
         detector_names=names,
         threshold=args.threshold,
+        probe_detectors=args.with_probe_detectors,
     )
     from .summary import to_markdown
 

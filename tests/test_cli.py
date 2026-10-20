@@ -117,6 +117,15 @@ def test_run_dry_run_writes_summaries(tmp_path, capsys):
     assert (tmp_path / "summary.md").exists()
 
 
+def test_run_with_probe_detectors_flag(tmp_path, capsys):
+    args = ["run", "--dry-run", "--probes", "test.Blank", "--report-dir", str(tmp_path)]
+    assert main([*args, "--with-probe-detectors"]) == 0
+    assert "any.AnyOutput" in capsys.readouterr().out
+    summary = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
+    assert summary["probe_detectors"] is True
+    assert "any.AnyOutput" in summary["totals"]["detectors"]
+
+
 def test_list_probes_passes_through(capsys):
     assert main(["list-probes"]) == 0
     assert "probes: " in capsys.readouterr().out
