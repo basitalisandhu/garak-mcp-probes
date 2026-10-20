@@ -163,7 +163,11 @@ def test_readme_documents_every_detector_and_config_key():
 def test_version_is_consistent():
     pyproject = read(ROOT / "pyproject.toml")
     assert re.search(rf'^version = "{re.escape(__version__)}"$', pyproject, re.M)
-    assert f"## [{__version__}] - 2026-10-05" in read(ROOT / "CHANGELOG.md")
+    # Any dated section for this version; a fixed date here broke every release.
+    changelog = read(ROOT / "CHANGELOG.md")
+    assert re.search(
+        rf"^## \[{re.escape(__version__)}\] - \d{{4}}-\d{{2}}-\d{{2}}$", changelog, re.M
+    )
 
 
 def test_dependencies_are_garak_and_mcp_only():
