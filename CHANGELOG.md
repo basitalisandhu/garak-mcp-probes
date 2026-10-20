@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
 ### Added
 
 - `garak-mcp run --with-probe-detectors` also runs each probe's own garak text detectors (its `primary_detector` and `extended_detectors`) next to the trace detectors. A detector that cannot load is skipped, logged once and listed under `detector_warnings` in `summary.json` and `summary.md` (#1).
@@ -33,5 +35,6 @@ All notable changes to this project are documented here. The format follows
 
 Tested against garak 0.17.0 and mcp 2.3.0.
 
-[Unreleased]: https://github.com/basitalisandhu/garak-mcp-probes/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/basitalisandhu/garak-mcp-probes/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/basitalisandhu/garak-mcp-probes/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/basitalisandhu/garak-mcp-probes/releases/tag/v0.1.0
