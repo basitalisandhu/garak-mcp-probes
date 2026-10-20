@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import datetime
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +29,7 @@ class RunResult:
     summary_md: Path
     summary: dict[str, Any]
     skipped: list[str]
+    detector_warnings: list[str] = field(default_factory=list)
 
 
 def resolve_probes(spec: str) -> list[str]:
@@ -96,6 +97,43 @@ def _cache_entry_guard() -> None:
     hb._emit_plugin_cache_entry = emit
 
 
+def probe_detector_names(probe: Any) -> list[str]:
+    """The text detectors a garak probe names: its ``primary_detector`` and then its
+    ``extended_detectors``, without duplicates, in that order."""
+    names: list[str] = []
+    primary = getattr(probe, "primary_detector", None)
+    extended = getattr(probe, "extended_detectors", None) or []
+    for name in [primary, *extended]:
+        if isinstance(name, str) and name and name not in names:
+            names.append(name)
+    return names
+
+
+def _load_probe_detectors(
+    probe: Any, probe_name: str, config_root: Any, cache: dict[str, Any], warnings: list[str]
+) -> list[Any]:
+    """Load the probe's own text detectors with garak's plugin loader. A detector that cannot
+    load (for example, one that needs a model download while offline) is skipped and a warning
+    is recorded; each failure is reported once per run."""
+    from garak import _plugins
+
+    loaded = []
+    for name in probe_detector_names(probe):
+        if name not in cache:
+            try:
+                cache[name] = _plugins.load_plugin("detectors." + name, config_root=config_root)
+            except Exception as exc:  # garak raises several types for a plugin that cannot load
+                cache[name] = None
+                first = next((ln.strip() for ln in str(exc).splitlines() if ln.strip()), "")
+                reason = f"{type(exc).__name__}: {first}" if first else type(exc).__name__
+                probe_label = probe_name.removeprefix("probes.")
+                warnings.append(f"detector {name} (named by {probe_label}) skipped: {reason}")
+                logging.warning("garak-mcp: %s", warnings[-1])
+        if cache[name] is not None:
+            loaded.append(cache[name])
+    return loaded
+
+
 def run(
     cfg: RunConfig,
     probe_spec: str,
@@ -105,6 +143,7 @@ def run(
     detector_names: list[str] | None = None,
     threshold: float = 0.5,
     generator: Any = None,
+    probe_detectors: bool = False,
 ) -> RunResult:
     from garak import _plugins, command
     from garak.evaluators import ThresholdEvaluator
@@ -134,6 +173,8 @@ def run(
         cache.clear()
 
     skipped: list[str] = []
+    warnings: list[str] = []
+    text_detectors: dict[str, Any] = {}
     command.start_run()
     try:
         harness = Harness(config_root=garak_config)
@@ -146,15 +187,27 @@ def run(
                 logging.warning("garak-mcp: skipping intent probe %s", name)
                 skipped.append(name)
                 continue
-            harness.run(gen, [probe], detectors, evaluator)
+            extra = (
+                _load_probe_detectors(probe, name, garak_config, text_detectors, warnings)
+                if probe_detectors
+                else []
+            )
+            harness.run(gen, [probe], [*detectors, *extra], evaluator)
     finally:
         report = Path(garak_config.transient.report_filename)
         command.end_run()
     summary = summ.summarise(report, threshold)
     summary["skipped_probes"] = skipped
+    summary["probe_detectors"] = probe_detectors
+    summary["detector_warnings"] = warnings
     summary["policy"] = cfg.policy.as_dict()
     summary["config"] = cfg.source
     js, md = summ.write(summary, out)
     return RunResult(
-        report=report, summary_json=js, summary_md=md, summary=summary, skipped=skipped
+        report=report,
+        summary_json=js,
+        summary_md=md,
+        summary=summary,
+        skipped=skipped,
+        detector_warnings=warnings,
     )

@@ -47,6 +47,7 @@ def load_notes() -> dict[str, str]:
 
 def build_server(notes: dict[str, str] | None = None) -> Any:
     from mcp.server import MCPServer
+    from mcp.server.mcpserver.exceptions import ToolError
 
     notes = load_notes() if notes is None else notes
     server = MCPServer("garak-mcp-fake")
@@ -65,7 +66,9 @@ def build_server(notes: dict[str, str] | None = None) -> Any:
     def read_note(name: str) -> str:
         """Return the text of one note by name."""
         if name not in notes:
-            raise ValueError(f"no note named {name!r}")
+            # ToolError, not ValueError: the SDK hides the text of other exceptions from the
+            # client (and logs a traceback), so the model would only see a generic failure.
+            raise ToolError(f"no note named {name!r}")
         return notes[name]
 
     @server.tool()

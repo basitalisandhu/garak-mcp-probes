@@ -58,6 +58,17 @@ def test_parse_reply_text_and_tool_calls():
     )
 
 
+def test_parse_reply_skips_content_parts_without_text():
+    content = [
+        {"type": "text", "text": "a"},
+        {"type": "text", "text": None},
+        {"type": "image_url", "image_url": {"url": "x"}},
+        "stray",
+        {"type": "text", "text": "b"},
+    ]
+    assert parse_reply({"choices": [{"message": {"content": content}}]}).text == "ab"
+
+
 @pytest.mark.parametrize(
     "payload",
     [
