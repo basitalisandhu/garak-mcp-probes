@@ -84,8 +84,8 @@ Tested against garak 0.17.0 and 0.17.1 and mcp 2.3.0. `pyproject.toml` pins `gar
 Container image: each release tag publishes `ghcr.io/basitalisandhu/garak-mcp-probes` (linux/amd64 and linux/arm64), running as uid 1000 in `/work`:
 
 ```bash
-docker run --rm ghcr.io/basitalisandhu/garak-mcp-probes:0.3.0 doctor --dry-run
-docker run --rm -v "$PWD:/work" ghcr.io/basitalisandhu/garak-mcp-probes:0.3.0 \
+docker run --rm ghcr.io/basitalisandhu/garak-mcp-probes:0.3.1 doctor --dry-run
+docker run --rm -v "$PWD:/work" ghcr.io/basitalisandhu/garak-mcp-probes:0.3.1 \
   run --config garak-mcp.yaml --probes test.Test --report-dir out
 ```
 

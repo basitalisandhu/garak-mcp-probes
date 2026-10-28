@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "garak-mcp-probes"
-version = "0.3.0"
+version = "0.3.1"
 description = "Run garak against your MCP servers: a generator that puts garak's probes through an agent using your MCP tools, and detectors that show when a probe makes the agent misuse a tool."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -35,6 +35,7 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Security",
   "Topic :: Software Development :: Testing",
   "Typing :: Typed",

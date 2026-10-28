@@ -14,7 +14,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from . import __version__
+from . import __version__, _jsondepth
 from .config import ModelConfig
 
 
@@ -74,7 +74,7 @@ class OpenAICompatibleModel:
         req = urllib.request.Request(self.url, data=data, headers=self._headers(), method="POST")
         try:
             with urllib.request.urlopen(req, timeout=self.cfg.timeout) as response:
-                payload = json.loads(response.read().decode("utf-8"))
+                payload = _jsondepth.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             raise ModelError(f"{self.url}: HTTP {exc.code} {exc.reason}") from exc
         except (urllib.error.URLError, OSError) as exc:

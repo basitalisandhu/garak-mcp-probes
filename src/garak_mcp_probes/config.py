@@ -6,7 +6,6 @@ is reported with the key path it came from, so a broken file fails before anythi
 
 from __future__ import annotations
 
-import json
 import math
 import os
 import re
@@ -15,6 +14,8 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from . import _jsondepth
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 SERVER_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,31}$")
@@ -150,7 +151,7 @@ def _read(path: Path) -> Any:
         raise ConfigError(f"{path}: not UTF-8 text (byte {exc.start})") from exc
     if path.suffix.lower() == ".json":
         try:
-            return json.loads(text)
+            return _jsondepth.loads(text)
         except RecursionError as exc:
             raise ConfigError(f"{path}: not valid JSON: nested too deeply") from exc
         except ValueError as exc:

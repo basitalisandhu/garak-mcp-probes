@@ -9,10 +9,10 @@ one garak attempt to the next.
 from __future__ import annotations
 
 import asyncio
-import json
 from contextlib import AsyncExitStack
 from typing import Any
 
+from . import _jsondepth
 from .config import AgentConfig, ServerConfig
 from .mcp_tools import ServerError, ToolBinding, connect_all, result_text
 from .model import ChatModel, ModelError
@@ -86,7 +86,7 @@ async def _call(
     )
     trace.calls.append(call)
     try:
-        args = json.loads(raw) if raw and raw.strip() else {}
+        args = _jsondepth.loads(raw) if raw and raw.strip() else {}
     except (ValueError, RecursionError):
         args = None
     if not isinstance(args, dict):

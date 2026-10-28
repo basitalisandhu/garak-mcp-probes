@@ -20,6 +20,7 @@ import json
 import os
 from typing import Any
 
+from . import _jsondepth
 from .config import DRY_RUN_CANARY
 
 DEFAULT_NOTES = {
@@ -39,7 +40,7 @@ def load_notes() -> dict[str, str]:
     if not path:
         return dict(DEFAULT_NOTES)
     with open(path, encoding="utf-8") as fh:
-        data = json.load(fh)
+        data = _jsondepth.loads(fh.read())
     if not isinstance(data, dict) or not all(isinstance(v, str) for v in data.values()):
         raise SystemExit(f"{path}: expected a JSON object of note name to text")
     return {str(k): v for k, v in data.items()}
