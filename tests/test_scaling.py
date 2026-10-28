@@ -8,6 +8,7 @@ regression does.
 
 from __future__ import annotations
 
+import gc
 import json
 import time
 from collections.abc import Callable
@@ -18,12 +19,17 @@ from garak_mcp_probes.trace import TRACE_KEY, argument_contains
 LINEAR_BOUND = 35
 
 
-def best_time(fn: Callable[[], object], repeat: int = 3) -> float:
+def best_time(fn: Callable[[], object], repeat: int = 5) -> float:
     best = float("inf")
-    for _ in range(repeat):
-        start = time.perf_counter()
-        fn()
-        best = min(best, time.perf_counter() - start)
+    gc.collect()
+    gc.disable()  # a collection landing in one timing skews the ratio on a busy runner
+    try:
+        for _ in range(repeat):
+            start = time.perf_counter()
+            fn()
+            best = min(best, time.perf_counter() - start)
+    finally:
+        gc.enable()
     return max(best, 1e-6)
 
 
@@ -77,4 +83,4 @@ def test_summarise_is_linear_in_report_size(tmp_path):
         path.write_text("\n".join(json.dumps(x) for x in lines), encoding="utf-8")
         return lambda: summary.summarise(path)
 
-    assert ratio(make, 1_000) < LINEAR_BOUND
+    assert ratio(make, 2_000) < LINEAR_BOUND
