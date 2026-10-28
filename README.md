@@ -84,8 +84,8 @@ Tested against garak 0.17.0 and 0.17.1 and mcp 2.3.0. `pyproject.toml` pins `gar
 Container image: each release tag publishes `ghcr.io/basitalisandhu/garak-mcp-probes` (linux/amd64 and linux/arm64), running as uid 1000 in `/work`:
 
 ```bash
-docker run --rm ghcr.io/basitalisandhu/garak-mcp-probes:0.2.0 doctor --dry-run
-docker run --rm -v "$PWD:/work" ghcr.io/basitalisandhu/garak-mcp-probes:0.2.0 \
+docker run --rm ghcr.io/basitalisandhu/garak-mcp-probes:0.3.0 doctor --dry-run
+docker run --rm -v "$PWD:/work" ghcr.io/basitalisandhu/garak-mcp-probes:0.3.0 \
   run --config garak-mcp.yaml --probes test.Test --report-dir out
 ```
 
@@ -96,10 +96,11 @@ Inside the container, stdio servers must be commands available in the image, and
 | Command | What it does | Exit codes |
 | --- | --- | --- |
 | `run (--config FILE \| --dry-run) --probes SPEC [--report-dir DIR] [--generations N] [--seed N] [--detectors LIST] [--with-probe-detectors] [--threshold X] [--fail-on-hit]` | runs the probes through the agent; writes garak's report, `summary.json` and `summary.md` | 0; 1 with `--fail-on-hit` and at least one hit; 2 |
+| `summarise REPORT [--report-dir DIR] [--threshold X] [--fail-on-hit]` | reads an existing garak report and writes `summary.json` and `summary.md` (default directory `garak-mcp-summary`); runs nothing and connects to nothing. `summarize` works too | 0; 1 with `--fail-on-hit` and at least one hit; 2 |
 | `doctor (--config FILE \| --dry-run)` | connects to every server and lists its tools, then sends the model one short request; runs no probe | 0; 1 a check failed; 2 |
 | `list-probes` | garak's probe list (`garak --list_probes`) | 0 |
 
-Exit code 2 means a usage, configuration or probe selection error. `--with-probe-detectors` also runs each probe's own garak text detectors (its `primary_detector`, then its `extended_detectors`) next to the trace detectors, so one report shows both what the agent said and what it did; a detector that cannot load (one that needs a model download while offline, for example) is skipped and listed under `detector_warnings` in `summary.json` and in `summary.md`. `--fail-on-hit` counts hits from those detectors too. `--generations` defaults to 1 (garak's own default is higher); `--threshold` is the score that counts as a hit (default 0.5, and the trace detectors only score 0.0 or 1.0). `--dry-run` with `--config` keeps the file's `agent` and `policy` sections and replaces the model and the servers with the fakes; the fake server takes the name of the first server in the file (`fake` without a file), so `server:tool` policy entries for that server still apply.
+Exit code 2 means a usage, configuration, report or probe selection error. `--with-probe-detectors` also runs each probe's own garak text detectors (its `primary_detector`, then its `extended_detectors`) next to the trace detectors, so one report shows both what the agent said and what it did; a detector that cannot load (one that needs a model download while offline, for example) is skipped and listed under `detector_warnings` in `summary.json` and in `summary.md`. `--fail-on-hit` counts hits from those detectors too. `--generations` defaults to 1 (garak's own default is higher); `--threshold` is the score that counts as a hit (default 0.5, and the trace detectors only score 0.0 or 1.0). `--dry-run` with `--config` keeps the file's `agent` and `policy` sections and replaces the model and the servers with the fakes; the fake server takes the name of the first server in the file (`fake` without a file), so `server:tool` policy entries for that server still apply.
 
 ## Configuration
 
@@ -145,6 +146,8 @@ The detection logic is plain functions over the trace in [`src/garak_mcp_probes/
 - `garak-mcp.<time>.report.jsonl`: garak's report. Each attempt's `outputs[].notes.mcp_trace` holds the trace: `stopped` (`final`, `max_steps`, `model_error` or `connect_error`), `error`, `model_steps`, `tools_offered`, and `calls` with `server`, `tool`, `function`, `arguments`, `result_chars`, `is_error` and `error`. Tool results are recorded by size only; arguments are recorded in full, because `ArgumentContains` reads them.
 - `garak-mcp.<time>.report.html`: garak's HTML digest of the same run.
 
+To count an existing report again, for example with another threshold, run `garak-mcp summarise garak-mcp-report/garak-mcp.<time>.report.jsonl --threshold 0.8 -o rescored`. It reads garak's own score lines, so it also works on a report from a plain `garak` run.
+
 A hit is a lead, not a verdict. Open the attempt in the JSONL report, read the prompt and the calls, and decide whether the call was a misuse in your setting.
 
 ## What it does not do
@@ -163,6 +166,21 @@ A hit is a lead, not a verdict. Open the attempt in the JSONL report, read the p
 - Every prompt opens fresh sessions: stdio servers start and stop per prompt, HTTP sessions are created per prompt. State does not leak between attempts, but slow-starting servers make runs slow. Attempts run one at a time.
 - Probes from garak that need extra downloads or services (some fetch datasets or use Hugging Face models) need network access for that, whatever this package does.
 - The trace records arguments in full. Do not point a run at servers holding real secrets you would not want in a report file.
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
+| --- | --- |
+| `pip install` takes a long time or runs out of disk | garak brings PyTorch and Hugging Face libraries. Install into a fresh virtual environment on a disk with room for them; on Linux without a GPU, install the CPU build of PyTorch first (`pip install torch --index-url https://download.pytorch.org/whl/cpu`), as the Dockerfile does. |
+| `pip` resolves garak 0.16 instead of 0.17 | You are on Python 3.10; garak 0.17 needs 3.11. Both work with this package. |
+| `garak-mcp: command not found` | The virtual environment is not active. Run `. .venv/bin/activate`, or call `.venv/bin/garak-mcp`, or `python -m garak_mcp_probes`. |
+| `doctor` shows `FAIL server ...` with `stderr: ...` | The stdio server did not start. The last line of its stderr is shown; run the `command` by hand in the same directory (`servers[].cwd`) to see the whole error. A server gets only a minimal environment, so put the variables it needs in `servers[].env`. |
+| `environment variable X is not set` | A `${X}` in `env` or `headers`, or `model.api_key_env`, names a variable your shell does not export. `export X=...` before the run. |
+| `plain http is only accepted for localhost` | Use `https`, or set `allow_http: true` on that server or on `model` if the plain HTTP endpoint is on a network you trust. |
+| Every attempt ends `stopped: connect_error` or `model_error` | Read the `error` field in the trace (`outputs[].notes.mcp_trace` in the JSONL report) or garak's log; run `garak-mcp doctor --config ...` first, which checks the same connections. |
+| The summary has fewer detectors than expected | `ToolCalled`, `ArgumentContains` and `UnexpectedTool` need `policy.deny_tools`, `policy.canaries` and `policy.allow_tools`; without them they are left out. |
+| `--with-probe-detectors` lists `detector_warnings` | That garak detector could not load, usually because it needs a model download and the machine is offline. The trace detectors still ran. |
+| A run is very slow | Every prompt starts fresh server sessions and runs the full agent loop. Start with one probe class, and lower `agent.max_steps` or `--generations`. |
 
 ## FAQ
 

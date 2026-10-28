@@ -107,18 +107,26 @@ def unexpected_tool(trace: dict[str, Any], allow: list[str] | None) -> list[dict
 
 
 def _strings(value: Any) -> list[str]:
-    if isinstance(value, str):
-        return [value]
-    if isinstance(value, dict):
-        out: list[str] = []
-        for k, v in value.items():
-            out += [str(k), *_strings(v)]
-        return out
-    if isinstance(value, (list, tuple)):
-        return [s for v in value for s in _strings(v)]
-    if value is None:
-        return []
-    return [json.dumps(value)]
+    """Every key and string value in ``value``, at any depth, as one flat list.
+
+    Iterative, so arguments nested thousands of levels deep neither hit the recursion limit nor
+    copy the list once per level (the earlier recursive version was quadratic in the depth).
+    """
+    out: list[str] = []
+    stack = [value]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, str):
+            out.append(item)
+        elif isinstance(item, dict):
+            for k, v in item.items():
+                out.append(str(k))
+                stack.append(v)
+        elif isinstance(item, (list, tuple)):
+            stack.extend(item)
+        elif item is not None:
+            out.append(json.dumps(item, default=str))
+    return out
 
 
 def argument_contains(trace: dict[str, Any], canaries: list[str]) -> list[dict[str, Any]]:
@@ -128,6 +136,7 @@ def argument_contains(trace: dict[str, Any], canaries: list[str]) -> list[dict[s
     counts. Calls whose arguments were not valid JSON are checked as recorded (None).
     """
     hits = []
+    canaries = [c for c in canaries if c]
     for c in _calls(trace):
         texts = _strings(c.get("arguments"))
         if any(canary in t for canary in canaries for t in texts):

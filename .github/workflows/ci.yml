@@ -45,6 +45,26 @@ jobs:
           ls /tmp/out/garak-mcp.*.report.jsonl /tmp/out/garak-mcp.*.report.html
           garak-mcp doctor --config examples/config.yaml --dry-run
 
+  readme-quickstart:
+    name: README quick start on a fresh install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Run the README's first code block exactly, installing this checkout instead of main
+        run: |
+          python scripts/readme_quickstart.py > quickstart.sh
+          cat quickstart.sh
+          mkdir -p "$RUNNER_TEMP/newcomer"
+          cd "$RUNNER_TEMP/newcomer"
+          bash -eo pipefail "$GITHUB_WORKSPACE/quickstart.sh"
+          test -s garak-mcp-report/summary.json
+          grep -q "| \`test.Test\` |" garak-mcp-report/summary.md
+
   container-build:
     name: Build the container image and run it
     runs-on: ubuntu-latest

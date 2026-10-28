@@ -12,3 +12,5 @@ htmlcov/
 garak-mcp-report/
 out/
 send-report-calls.jsonl
+garak-mcp-summary/
+.hypothesis/

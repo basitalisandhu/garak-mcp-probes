@@ -1,12 +1,13 @@
-"""The ``garak-mcp`` command line: ``run``, ``doctor`` and ``list-probes``.
+"""The ``garak-mcp`` command line: ``run``, ``summarise``, ``doctor`` and ``list-probes``.
 
-Exit codes: 0 success; 1 ``run --fail-on-hit`` found hits, or ``doctor`` found a failing check;
-2 usage, configuration or setup error.
+Exit codes: 0 success; 1 ``run`` or ``summarise`` with ``--fail-on-hit`` found hits, or ``doctor``
+found a failing check; 2 usage, configuration or setup error.
 """
 
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from collections.abc import Sequence
 
@@ -37,6 +38,17 @@ def _add_config_args(p: argparse.ArgumentParser) -> None:
         help="use the built-in fake model and fake MCP server (no network, no keys); "
         "the policy and agent settings of --config still apply",
     )
+
+
+def _threshold(text: str) -> float:
+    """``--threshold``: a number from 0 to 1 (garak's detector scores use that range)."""
+    try:
+        value = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected a number from 0 to 1, got {text!r}") from None
+    if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+        raise argparse.ArgumentTypeError(f"expected a number from 0 to 1, got {text!r}")
+    return value
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -71,9 +83,31 @@ def build_parser() -> argparse.ArgumentParser:
         "detectors) next to the trace detectors; any that cannot load are skipped with a warning",
     )
     run.add_argument(
-        "--threshold", type=float, default=0.5, help="score that counts as a hit (default 0.5)"
+        "--threshold", type=_threshold, default=0.5, help="score that counts as a hit (default 0.5)"
     )
     run.add_argument(
+        "--fail-on-hit", action="store_true", help="exit 1 when any detector scored a hit"
+    )
+
+    summarise = sub.add_parser(
+        "summarise",
+        aliases=["summarize"],
+        help="write summary.json and summary.md for an existing garak report, without a run",
+        description="Read a garak JSONL report (from garak-mcp run or garak itself) and write "
+        "summary.json and summary.md. Nothing is run and nothing connects to a server or model.",
+    )
+    summarise.add_argument("report", help="garak report file, *.report.jsonl")
+    summarise.add_argument(
+        "--report-dir",
+        "-o",
+        default="garak-mcp-summary",
+        help="output directory (default garak-mcp-summary; a separate directory, so the "
+        "summary a run wrote next to its report is not overwritten)",
+    )
+    summarise.add_argument(
+        "--threshold", type=_threshold, default=0.5, help="score that counts as a hit (default 0.5)"
+    )
+    summarise.add_argument(
         "--fail-on-hit", action="store_true", help="exit 1 when any detector scored a hit"
     )
 
@@ -124,6 +158,20 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return 1 if args.fail_on_hit and hits else 0
 
 
+def _cmd_summarise(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from .summary import summarise, to_markdown, write
+
+    report = Path(args.report)
+    result = summarise(report, args.threshold)
+    js, md = write(result, args.report_dir)
+    print(to_markdown(result))
+    print(f"summary: {js} and {md}")
+    hits = sum(d["hits"] for d in result["totals"]["detectors"].values())
+    return 1 if args.fail_on_hit and hits else 0
+
+
 def _cmd_doctor(args: argparse.Namespace) -> int:
     from . import doctor
 
@@ -148,6 +196,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if args.command == "run":
             return _cmd_run(args)
+        if args.command in ("summarise", "summarize"):
+            return _cmd_summarise(args)
         if args.command == "doctor":
             return _cmd_doctor(args)
         return _cmd_list_probes()

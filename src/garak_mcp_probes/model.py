@@ -79,7 +79,7 @@ class OpenAICompatibleModel:
             raise ModelError(f"{self.url}: HTTP {exc.code} {exc.reason}") from exc
         except (urllib.error.URLError, OSError) as exc:
             raise ModelError(f"{self.url}: {exc}") from exc
-        except ValueError as exc:
+        except (ValueError, RecursionError) as exc:
             raise ModelError(f"{self.url}: response is not JSON") from exc
         return parse_reply(payload)
 
@@ -93,13 +93,19 @@ def parse_reply(payload: Any) -> Reply:
     if not isinstance(message, dict):
         raise ModelError("choices[0].message is not an object")
     calls = []
-    for i, tc in enumerate(message.get("tool_calls") or []):
+    raw_calls = message.get("tool_calls") or []
+    if not isinstance(raw_calls, list):
+        raise ModelError("choices[0].message.tool_calls is not a list")
+    for i, tc in enumerate(raw_calls):
         fn = tc.get("function") if isinstance(tc, dict) else None
-        if not isinstance(fn, dict) or not fn.get("name"):
+        if not isinstance(fn, dict) or not fn.get("name") or not isinstance(fn["name"], str):
             raise ModelError(f"tool_calls[{i}] has no function name")
         args = fn.get("arguments")
         if not isinstance(args, str):
-            args = json.dumps(args if args is not None else {})
+            try:
+                args = json.dumps(args if args is not None else {})
+            except (TypeError, ValueError, RecursionError) as exc:
+                raise ModelError(f"tool_calls[{i}] arguments cannot be encoded: {exc}") from None
         calls.append(
             ToolRequest(id=str(tc.get("id") or f"call_{i}"), name=fn["name"], arguments=args)
         )
