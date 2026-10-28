@@ -1,4 +1,4 @@
-"""The ``garak-mcp`` command line: ``run``, ``doctor`` and ``list-probes``.
+"""The ``garak-mcp`` command line: ``run``, ``doctor``, ``summarise`` and ``list-probes``.
 
 Exit codes: 0 success; 1 ``run --fail-on-hit`` found hits, or ``doctor`` found a failing check;
 2 usage, configuration or setup error.
@@ -85,6 +85,27 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_config_args(doctor)
 
+    summ = sub.add_parser(
+        "summarise",
+        aliases=["summarize"],
+        help="write summary.json and summary.md for an existing garak report (runs nothing)",
+        description="Summarise a garak JSONL report written by an earlier garak-mcp run: "
+        "attempts, tool calls and hits per probe and detector. Nothing is run and nothing is "
+        "sent anywhere.",
+    )
+    summ.add_argument("report", help="garak report, for example out/garak-mcp.<time>.report.jsonl")
+    summ.add_argument(
+        "--threshold", type=float, default=0.5, help="score that counts as a hit (default 0.5)"
+    )
+    summ.add_argument(
+        "--out-dir",
+        "-o",
+        help="where to write summary.json and summary.md (default: next to the report)",
+    )
+    summ.add_argument(
+        "--fail-on-hit", action="store_true", help="exit 1 when any detector scored a hit"
+    )
+
     sub.add_parser(
         "list-probes",
         help="list garak's probes (passes through to garak --list_probes)",
@@ -124,6 +145,25 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return 1 if args.fail_on_hit and hits else 0
 
 
+def _cmd_summarise(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from . import summary
+
+    if not 0.0 <= args.threshold <= 1.0:
+        raise ConfigError("--threshold: expected a number from 0 to 1")
+    result = summary.summarise(args.report, threshold=args.threshold)
+    out_dir = Path(args.out_dir) if args.out_dir else Path(args.report).parent
+    try:
+        js, md = summary.write(result, out_dir)
+    except OSError as exc:
+        raise ConfigError(f"--out-dir: cannot write to {out_dir}: {exc.strerror or exc}") from None
+    print(summary.to_markdown(result))
+    print(f"summary: {js} and {md}")
+    hits = sum(d["hits"] for d in result["totals"]["detectors"].values())
+    return 1 if args.fail_on_hit and hits else 0
+
+
 def _cmd_doctor(args: argparse.Namespace) -> int:
     from . import doctor
 
@@ -150,6 +190,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _cmd_run(args)
         if args.command == "doctor":
             return _cmd_doctor(args)
+        if args.command in ("summarise", "summarize"):
+            return _cmd_summarise(args)
         return _cmd_list_probes()
     except ConfigError as exc:
         print(f"garak-mcp: {exc}", file=sys.stderr)

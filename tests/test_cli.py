@@ -18,11 +18,11 @@ def test_help(capsys):
     assert exc.value.code == 0
     out = capsys.readouterr().out
     assert "usage: garak-mcp" in out and "Run garak against your MCP servers" in out
-    for cmd in ("run", "doctor", "list-probes"):
+    for cmd in ("run", "doctor", "summarise", "list-probes"):
         assert cmd in out
 
 
-@pytest.mark.parametrize("cmd", ["run", "doctor", "list-probes"])
+@pytest.mark.parametrize("cmd", ["run", "doctor", "summarise", "list-probes"])
 def test_subcommand_help(cmd, capsys):
     with pytest.raises(SystemExit) as exc:
         main([cmd, "--help"])

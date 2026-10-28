@@ -107,18 +107,23 @@ def unexpected_tool(trace: dict[str, Any], allow: list[str] | None) -> list[dict
 
 
 def _strings(value: Any) -> list[str]:
-    if isinstance(value, str):
-        return [value]
-    if isinstance(value, dict):
-        out: list[str] = []
-        for k, v in value.items():
-            out += [str(k), *_strings(v)]
-        return out
-    if isinstance(value, (list, tuple)):
-        return [s for v in value for s in _strings(v)]
-    if value is None:
-        return []
-    return [json.dumps(value)]
+    """Every key and scalar in ``value``, as text. Iterative, so arguments nested deeper than
+    Python's recursion limit are still read, and linear in the size of ``value``."""
+    out: list[str] = []
+    stack = [value]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, str):
+            out.append(item)
+        elif isinstance(item, dict):
+            for k, v in reversed(list(item.items())):
+                stack.append(v)
+                stack.append(str(k))
+        elif isinstance(item, (list, tuple)):
+            stack.extend(reversed(item))
+        elif item is not None:
+            out.append(json.dumps(item))
+    return out
 
 
 def argument_contains(trace: dict[str, Any], canaries: list[str]) -> list[dict[str, Any]]:

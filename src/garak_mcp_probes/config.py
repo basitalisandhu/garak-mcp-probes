@@ -141,14 +141,23 @@ def expand_env(value: str, where: str) -> str:
 
 def _read(path: Path) -> Any:
     try:
-        text = path.read_text(encoding="utf-8")
+        data = path.read_bytes()
     except OSError as exc:
         raise ConfigError(f"{path}: cannot read: {exc.strerror or exc}") from exc
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise ConfigError(
+            f"{path}: not UTF-8 text (byte 0x{data[exc.start]:02x} at offset {exc.start}); "
+            "save it as UTF-8"
+        ) from None
     if path.suffix.lower() == ".json":
         try:
             return json.loads(text)
         except ValueError as exc:
             raise ConfigError(f"{path}: not valid JSON: {exc}") from exc
+        except RecursionError:
+            raise ConfigError(f"{path}: not valid JSON: nested too deeply") from None
     try:
         import yaml
     except ImportError as exc:  # pragma: no cover - garak installs PyYAML
@@ -157,6 +166,8 @@ def _read(path: Path) -> Any:
         return yaml.safe_load(text)
     except yaml.YAMLError as exc:
         raise ConfigError(f"{path}: not valid YAML: {exc}") from exc
+    except RecursionError:
+        raise ConfigError(f"{path}: not valid YAML: nested too deeply") from None
 
 
 def load(path: str | Path, dry_run: bool = False) -> RunConfig:
@@ -175,7 +186,8 @@ def _expect(value: Any, kind: type | tuple[type, ...], where: str, what: str) ->
 
 
 def _keys(data: dict[str, Any], allowed: set[str], where: str) -> None:
-    unknown = sorted(set(data) - allowed)
+    # YAML allows non-string keys (1:, true:, null:); report them by their text, do not crash.
+    unknown = sorted(str(k) for k in data if not isinstance(k, str) or k not in allowed)
     if unknown:
         raise ConfigError(f"{where}: unknown key(s) {', '.join(unknown)}")
 
@@ -296,7 +308,10 @@ def _server(data: Any, i: int) -> ServerConfig:
         if isinstance(cmd, str):
             import shlex
 
-            cmd = shlex.split(cmd)
+            try:
+                cmd = shlex.split(cmd)
+            except ValueError as exc:  # an unclosed quote
+                raise ConfigError(f"{where}.command: cannot split into words: {exc}") from None
         s.command = _str_list(cmd, f"{where}.command")
         if not s.command:
             raise ConfigError(f"{where}.command: must not be empty")

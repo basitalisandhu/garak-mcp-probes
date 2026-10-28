@@ -16,7 +16,7 @@ Shipped as `run --with-probe-detectors` ([#1](https://github.com/basitalisandhu/
 - The check lives in `trace.py` as a pure function with tests; the detector class only binds it.
 - The README's configuration and detectors tables gain a row each.
 
-## 3. `garak-mcp summarise REPORT`
+## 3. `garak-mcp summarise REPORT` (done in 0.3.0)
 
 **Context.** `summary.py` can summarise any report the runner wrote, but there is no command for an existing report.
 

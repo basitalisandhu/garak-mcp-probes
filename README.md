@@ -84,8 +84,8 @@ Tested against garak 0.17.0 and 0.17.1 and mcp 2.3.0. `pyproject.toml` pins `gar
 Container image: each release tag publishes `ghcr.io/basitalisandhu/garak-mcp-probes` (linux/amd64 and linux/arm64), running as uid 1000 in `/work`:
 
 ```bash
-docker run --rm ghcr.io/basitalisandhu/garak-mcp-probes:0.2.0 doctor --dry-run
-docker run --rm -v "$PWD:/work" ghcr.io/basitalisandhu/garak-mcp-probes:0.2.0 \
+docker run --rm ghcr.io/basitalisandhu/garak-mcp-probes:0.3.0 doctor --dry-run
+docker run --rm -v "$PWD:/work" ghcr.io/basitalisandhu/garak-mcp-probes:0.3.0 \
   run --config garak-mcp.yaml --probes test.Test --report-dir out
 ```
 
@@ -97,6 +97,7 @@ Inside the container, stdio servers must be commands available in the image, and
 | --- | --- | --- |
 | `run (--config FILE \| --dry-run) --probes SPEC [--report-dir DIR] [--generations N] [--seed N] [--detectors LIST] [--with-probe-detectors] [--threshold X] [--fail-on-hit]` | runs the probes through the agent; writes garak's report, `summary.json` and `summary.md` | 0; 1 with `--fail-on-hit` and at least one hit; 2 |
 | `doctor (--config FILE \| --dry-run)` | connects to every server and lists its tools, then sends the model one short request; runs no probe | 0; 1 a check failed; 2 |
+| `summarise REPORT [--threshold X] [-o DIR] [--fail-on-hit]` | writes `summary.json` and `summary.md` for a garak report from an earlier run, next to the report unless `-o` is given; runs nothing (`summarize` works too) | 0; 1 with `--fail-on-hit` and at least one hit; 2 |
 | `list-probes` | garak's probe list (`garak --list_probes`) | 0 |
 
 Exit code 2 means a usage, configuration or probe selection error. `--with-probe-detectors` also runs each probe's own garak text detectors (its `primary_detector`, then its `extended_detectors`) next to the trace detectors, so one report shows both what the agent said and what it did; a detector that cannot load (one that needs a model download while offline, for example) is skipped and listed under `detector_warnings` in `summary.json` and in `summary.md`. `--fail-on-hit` counts hits from those detectors too. `--generations` defaults to 1 (garak's own default is higher); `--threshold` is the score that counts as a hit (default 0.5, and the trace detectors only score 0.0 or 1.0). `--dry-run` with `--config` keeps the file's `agent` and `policy` sections and replaces the model and the servers with the fakes; the fake server takes the name of the first server in the file (`fake` without a file), so `server:tool` policy entries for that server still apply.
@@ -137,7 +138,7 @@ Each detector returns one score per output: 1.0 when the trace shows the behavio
 | `StepBudgetExceeded` | the loop hit `agent.max_steps` without a final answer, or made more than `policy.step_budget` tool calls | `agent.max_steps`, `policy.step_budget` | always |
 | `ToolError` | a call failed: the server returned an error result, the call raised, the arguments were not a JSON object, or the tool does not exist | nothing | always |
 
-The detection logic is plain functions over the trace in [`src/garak_mcp_probes/trace.py`](src/garak_mcp_probes/trace.py), so it can be reused on a saved report without garak.
+The detection logic is plain functions over the trace in [`src/garak_mcp_probes/trace.py`](src/garak_mcp_probes/trace.py), so it can be reused on a saved report without garak; `garak-mcp summarise REPORT` recounts a saved report, for example with a different `--threshold`.
 
 ## Reading the results
 
@@ -163,6 +164,26 @@ A hit is a lead, not a verdict. Open the attempt in the JSONL report, read the p
 - Every prompt opens fresh sessions: stdio servers start and stop per prompt, HTTP sessions are created per prompt. State does not leak between attempts, but slow-starting servers make runs slow. Attempts run one at a time.
 - Probes from garak that need extra downloads or services (some fetch datasets or use Hugging Face models) need network access for that, whatever this package does.
 - The trace records arguments in full. Do not point a run at servers holding real secrets you would not want in a report file.
+
+## Troubleshooting
+
+Real messages and what to do about them. Configuration and usage errors exit 2 and name the file and key.
+
+| Message | Cause and fix |
+| --- | --- |
+| `ERROR: Package 'garak-mcp-probes' requires a different Python: 3.9.18 not in '>=3.10'` | Use Python 3.10 or newer (3.11 or newer to get garak 0.17). |
+| `garak-mcp: --config is required unless --dry-run is given` | Pass `--config garak-mcp.yaml`, or `--dry-run` for the offline check. |
+| `garak-mcp: garak-mcp.yaml: model.base_url: required (or set GARAK_MCP_BASE_URL)` | Set `model.base_url` and `model.name` in the file, or export `GARAK_MCP_BASE_URL` and `GARAK_MCP_MODEL`. |
+| `garak-mcp: garak-mcp.yaml: model.base_url: plain http is only accepted for localhost; use https or set allow_http` | Use the endpoint's `https` URL. Set `model.allow_http: true` only on a network you trust. |
+| `garak-mcp: garak-mcp.yaml: policy.canaries[0]: use at least 6 characters so ordinary text does not match` | Use a longer, distinctive canary, such as a made-up record id. |
+| `garak-mcp: garak-mcp.yaml: not UTF-8 text (byte 0xe9 at offset 22); save it as UTF-8` | The file was saved in a legacy encoding. Re-save it as UTF-8. |
+| `garak-mcp: garak-mcp.yaml: servers[0].command: cannot split into words: No closing quotation` | A string `command` is split like a shell line. Close the quote, or write the command as a list. |
+| `FAIL server s (stdio): ... FileNotFoundError: [Errno 2] No such file or directory: 'my-server'` | The server command is not on `PATH`. Use the full path, or the virtual environment's `python -m ...`. |
+| `FAIL server s (stdio): ... environment variable MY_TOKEN is not set` | A `${VAR}` in `env` or `headers` is not exported in the shell that runs `garak-mcp`. |
+| `FAIL server h (http): ... ConnectError: All connection attempts failed` | Nothing is listening at the server `url`. Start the server, and check the host, port and path (often `/mcp`). |
+| `FAIL model m at http://localhost:8000/v1: ...: <urlopen error [Errno 61] Connection refused>` | The model server is not running at `model.base_url` (Linux shows `[Errno 111]`). |
+| `garak-mcp: ...report.jsonl: no init entry; is this a garak report?` | `summarise` needs the `garak-mcp.<time>.report.jsonl` that `run` wrote, not `summary.json` or a hit log. |
+| `pip` stops with `No space left on device` while installing | garak brings PyTorch and Hugging Face libraries. Free a few GB, or use the container image. |
 
 ## FAQ
 

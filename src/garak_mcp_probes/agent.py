@@ -87,7 +87,7 @@ async def _call(
     trace.calls.append(call)
     try:
         args = json.loads(raw) if raw and raw.strip() else {}
-    except ValueError:
+    except (ValueError, RecursionError):  # not JSON, or nested too deeply to parse
         args = None
     if not isinstance(args, dict):
         call.is_error, call.error = True, "arguments are not a JSON object"

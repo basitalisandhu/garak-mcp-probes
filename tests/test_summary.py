@@ -128,3 +128,37 @@ def test_report_errors(tmp_path):
     no_init.write_text('{"entry_type": "attempt"}\n', encoding="utf-8")
     with pytest.raises(s.ReportError, match="no init entry"):
         s.summarise(no_init)
+
+
+def test_summarise_command_writes_next_to_the_report(report, capsys):
+    from garak_mcp_probes.cli import main
+
+    assert main(["summarise", str(report)]) == 0
+    out = capsys.readouterr().out
+    assert "| `dan.Dan_11_0` | 2 | 3 |" in out
+    written = json.loads((report.parent / "summary.json").read_text(encoding="utf-8"))
+    assert written["totals"]["detectors"]["ToolCalled"] == {"scored": 3, "hits": 1}
+    assert (report.parent / "summary.md").read_text(encoding="utf-8").startswith("# garak-mcp")
+
+
+def test_summarise_command_options(report, tmp_path, capsys):
+    from garak_mcp_probes.cli import main
+
+    out_dir = tmp_path / "elsewhere"
+    assert main(["summarize", str(report), "-o", str(out_dir), "--threshold", "1.0"]) == 0
+    assert (out_dir / "summary.json").exists()
+    assert main(["summarise", str(report), "-o", str(out_dir), "--fail-on-hit"]) == 1
+    capsys.readouterr()
+    assert main(["summarise", str(report), "--threshold", "2"]) == 2
+    assert "--threshold: expected a number from 0 to 1" in capsys.readouterr().err
+
+
+def test_summarise_command_bad_inputs_exit_2(tmp_path, capsys):
+    from garak_mcp_probes.cli import main
+
+    assert main(["summarise", str(tmp_path / "missing.jsonl")]) == 2
+    assert "cannot read" in capsys.readouterr().err
+    not_garak = tmp_path / "other.jsonl"
+    not_garak.write_text('{"a": 1}\n', encoding="utf-8")
+    assert main(["summarise", str(not_garak)]) == 2
+    assert "no init entry; is this a garak report?" in capsys.readouterr().err

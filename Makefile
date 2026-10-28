@@ -1,4 +1,4 @@
-.PHONY: install lint format test check dry-run build clean
+.PHONY: install lint format test check dry-run e2e build clean
 
 PY ?= .venv/bin/python
 
@@ -23,6 +23,10 @@ check: lint test
 dry-run:
 	$(PY) -m garak_mcp_probes doctor --dry-run
 	$(PY) -m garak_mcp_probes run --dry-run --probes test.Test --report-dir garak-mcp-report
+
+# The README quick start against a fresh wheel install in a temporary directory (slow: installs garak).
+e2e:
+	PYTHON=$(PY) scripts/e2e_quickstart.sh
 
 build:
 	rm -rf dist

@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-28
+
+### Added
+
+- `garak-mcp summarise REPORT [--threshold X] [-o DIR] [--fail-on-hit]` (also `summarize`) writes `summary.json` and `summary.md` for a report from an earlier run without running anything. A missing or non-garak file exits 2 with the reason (#3).
+- README "Troubleshooting" table with the real messages and their fixes.
+- `scripts/e2e_quickstart.sh` runs the README quick start (dry run, then `summarise` on its report) against a freshly installed wheel in a temporary directory; CI runs it.
+- Seeded, time-limited fuzz tests over the configuration reader, the report reader, the chat completions reply parser and the trace checks, with scaling tests.
+
+### Fixed
+
+- A configuration file that is not UTF-8, JSON or YAML nested deeper than Python's recursion limit, a YAML key that is not a string (`1: x`) or a string `command` with an unclosed quote stopped `run` and `doctor` with a Python traceback; each is now a configuration error (exit 2) naming the file. A UTF-8 byte order mark is accepted.
+- The report reader stopped with a traceback on a non-UTF-8 or too deeply nested report, and on attempts whose `outputs`, `detector_results` or scores had the wrong type; fields of the wrong type now count as empty and the rest is a `ReportError`.
+- A model reply whose `tool_calls` was not a list, or whose function name was not a string, raised `TypeError` instead of `ModelError`; a reply nested too deeply raised `RecursionError`.
+- Tool-call arguments nested too deeply to parse are recorded as "arguments are not a JSON object" instead of failing the attempt.
+- `ArgumentContains` walked arguments recursively and copied each level: nested arguments 2,000 levels deep took 0.92 s per 20 calls (0.013 s at 200 levels) and deeper ones crashed. The walk is now iterative and linear (0.02 s at 2,000 levels).
+
 ## [0.2.0] - 2026-10-20
 
 ### Added

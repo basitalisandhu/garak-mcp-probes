@@ -22,9 +22,16 @@ class ReportError(ValueError):
 
 def _entries(path: Path) -> list[dict[str, Any]]:
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        data = path.read_bytes()
     except OSError as exc:
         raise ReportError(f"{path}: cannot read: {exc.strerror or exc}") from exc
+    try:
+        lines = data.decode("utf-8").splitlines()
+    except UnicodeDecodeError as exc:
+        raise ReportError(
+            f"{path}: not UTF-8 text (byte 0x{data[exc.start]:02x} at offset {exc.start}); "
+            "is this a garak report?"
+        ) from None
     entries = []
     for n, line in enumerate(lines, 1):
         if not line.strip():
@@ -33,6 +40,8 @@ def _entries(path: Path) -> list[dict[str, Any]]:
             entry = json.loads(line)
         except ValueError as exc:
             raise ReportError(f"{path}: line {n} is not JSON") from exc
+        except RecursionError:
+            raise ReportError(f"{path}: line {n} is nested too deeply") from None
         if isinstance(entry, dict):
             entries.append(entry)
     if not any(e.get("entry_type") == "init" for e in entries):
@@ -59,21 +68,26 @@ def summarise(report: str | Path, threshold: float = 0.5) -> dict[str, Any]:
             probe, {"attempts": 0, "outputs": 0, "tool_calls": 0, "no_trace": 0, "detectors": {}}
         )
         p["attempts"] += 1
-        outputs = e.get("outputs") or []
+        # Fields of the wrong type (a hand-edited or truncated report) count as empty rather
+        # than stopping the summary with a TypeError.
+        outputs = e.get("outputs")
+        outputs = outputs if isinstance(outputs, list) else []
         p["outputs"] += len(outputs)
         for out in outputs:
             trace = from_message(out) if isinstance(out, dict) else None
             if trace is None:
                 p["no_trace"] += 1
             else:
-                p["tool_calls"] += len(trace.get("calls") or [])
-        for det, scores in (e.get("detector_results") or {}).items():
-            d = p["detectors"].setdefault(short_detector(det), {"scored": 0, "hits": 0})
-            for s in scores or []:
-                if s is None:
-                    continue
+                calls = trace.get("calls")
+                p["tool_calls"] += len(calls) if isinstance(calls, list) else 0
+        results = e.get("detector_results")
+        for det, scores in (results if isinstance(results, dict) else {}).items():
+            d = p["detectors"].setdefault(short_detector(str(det)), {"scored": 0, "hits": 0})
+            for s in scores if isinstance(scores, list) else []:
+                if isinstance(s, bool) or not isinstance(s, (int, float)):
+                    continue  # None (not scored) or not a score at all
                 d["scored"] += 1
-                if float(s) >= threshold:
+                if s >= threshold:
                     d["hits"] += 1
     return {
         "report": path.name,

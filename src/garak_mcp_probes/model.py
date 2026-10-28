@@ -81,6 +81,8 @@ class OpenAICompatibleModel:
             raise ModelError(f"{self.url}: {exc}") from exc
         except ValueError as exc:
             raise ModelError(f"{self.url}: response is not JSON") from exc
+        except RecursionError:
+            raise ModelError(f"{self.url}: response JSON is nested too deeply") from None
         return parse_reply(payload)
 
 
@@ -93,13 +95,19 @@ def parse_reply(payload: Any) -> Reply:
     if not isinstance(message, dict):
         raise ModelError("choices[0].message is not an object")
     calls = []
-    for i, tc in enumerate(message.get("tool_calls") or []):
+    tool_calls = message.get("tool_calls") or []
+    if not isinstance(tool_calls, list):
+        raise ModelError("choices[0].message.tool_calls is not a list")
+    for i, tc in enumerate(tool_calls):
         fn = tc.get("function") if isinstance(tc, dict) else None
-        if not isinstance(fn, dict) or not fn.get("name"):
+        if not isinstance(fn, dict) or not isinstance(fn.get("name"), str) or not fn["name"]:
             raise ModelError(f"tool_calls[{i}] has no function name")
         args = fn.get("arguments")
         if not isinstance(args, str):
-            args = json.dumps(args if args is not None else {})
+            try:
+                args = json.dumps(args if args is not None else {})
+            except (TypeError, ValueError, RecursionError):
+                raise ModelError(f"tool_calls[{i}].function.arguments cannot be read") from None
         calls.append(
             ToolRequest(id=str(tc.get("id") or f"call_{i}"), name=fn["name"], arguments=args)
         )
