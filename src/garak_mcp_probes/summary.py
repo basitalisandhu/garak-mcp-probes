@@ -21,23 +21,34 @@ class ReportError(ValueError):
 
 
 def _entries(path: Path) -> list[dict[str, Any]]:
+    if path.is_dir():
+        raise ReportError(f"{path}: is a directory; pass the .report.jsonl file inside it")
+    entries = []
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        with path.open(encoding="utf-8") as fh:
+            for n, line in enumerate(fh, 1):
+                if not line.strip():
+                    continue
+                try:
+                    entry = json.loads(line)
+                except (ValueError, RecursionError) as exc:
+                    raise ReportError(f"{path}: line {n} is not JSON") from exc
+                if isinstance(entry, dict):
+                    entries.append(entry)
     except OSError as exc:
         raise ReportError(f"{path}: cannot read: {exc.strerror or exc}") from exc
-    entries = []
-    for n, line in enumerate(lines, 1):
-        if not line.strip():
-            continue
-        try:
-            entry = json.loads(line)
-        except ValueError as exc:
-            raise ReportError(f"{path}: line {n} is not JSON") from exc
-        if isinstance(entry, dict):
-            entries.append(entry)
+    except UnicodeDecodeError as exc:
+        raise ReportError(f"{path}: not UTF-8 text (byte {exc.start})") from exc
     if not any(e.get("entry_type") == "init" for e in entries):
         raise ReportError(f"{path}: no init entry; is this a garak report?")
     return entries
+
+
+def _score(value: Any) -> float | None:
+    """A detector score as a float; None for a missing or unreadable score."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
 
 
 def short_detector(name: str) -> str:
@@ -59,21 +70,25 @@ def summarise(report: str | Path, threshold: float = 0.5) -> dict[str, Any]:
             probe, {"attempts": 0, "outputs": 0, "tool_calls": 0, "no_trace": 0, "detectors": {}}
         )
         p["attempts"] += 1
-        outputs = e.get("outputs") or []
+        outputs = e.get("outputs")
+        outputs = outputs if isinstance(outputs, list) else []
         p["outputs"] += len(outputs)
         for out in outputs:
             trace = from_message(out) if isinstance(out, dict) else None
             if trace is None:
                 p["no_trace"] += 1
             else:
-                p["tool_calls"] += len(trace.get("calls") or [])
-        for det, scores in (e.get("detector_results") or {}).items():
-            d = p["detectors"].setdefault(short_detector(det), {"scored": 0, "hits": 0})
-            for s in scores or []:
-                if s is None:
+                calls = trace.get("calls")
+                p["tool_calls"] += len(calls) if isinstance(calls, list) else 0
+        results = e.get("detector_results")
+        for det, scores in (results if isinstance(results, dict) else {}).items():
+            d = p["detectors"].setdefault(short_detector(str(det)), {"scored": 0, "hits": 0})
+            for raw in scores if isinstance(scores, list) else []:
+                score = _score(raw)
+                if score is None:
                     continue
                 d["scored"] += 1
-                if float(s) >= threshold:
+                if score >= threshold:
                     d["hits"] += 1
     return {
         "report": path.name,

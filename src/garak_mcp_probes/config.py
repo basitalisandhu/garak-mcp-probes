@@ -7,9 +7,11 @@ is reported with the key path it came from, so a broken file fails before anythi
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import sys
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -144,9 +146,13 @@ def _read(path: Path) -> Any:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
         raise ConfigError(f"{path}: cannot read: {exc.strerror or exc}") from exc
+    except UnicodeDecodeError as exc:
+        raise ConfigError(f"{path}: not UTF-8 text (byte {exc.start})") from exc
     if path.suffix.lower() == ".json":
         try:
             return json.loads(text)
+        except RecursionError as exc:
+            raise ConfigError(f"{path}: not valid JSON: nested too deeply") from exc
         except ValueError as exc:
             raise ConfigError(f"{path}: not valid JSON: {exc}") from exc
     try:
@@ -155,6 +161,8 @@ def _read(path: Path) -> Any:
         raise ConfigError(f"{path}: YAML needs PyYAML; install it or use a .json file") from exc
     try:
         return yaml.safe_load(text)
+    except RecursionError as exc:
+        raise ConfigError(f"{path}: not valid YAML: nested too deeply") from exc
     except yaml.YAMLError as exc:
         raise ConfigError(f"{path}: not valid YAML: {exc}") from exc
 
@@ -171,11 +179,14 @@ def _expect(value: Any, kind: type | tuple[type, ...], where: str, what: str) ->
         raise ConfigError(f"{where}: expected {what}")
     if not isinstance(value, kind):
         raise ConfigError(f"{where}: expected {what}")
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ConfigError(f"{where}: expected {what}, not {value}")
     return value
 
 
 def _keys(data: dict[str, Any], allowed: set[str], where: str) -> None:
-    unknown = sorted(set(data) - allowed)
+    # YAML keys need not be strings (``1: x``, ``null: y``), so sort and print them as text.
+    unknown = sorted({str(k) for k in data if k not in allowed})
     if unknown:
         raise ConfigError(f"{where}: unknown key(s) {', '.join(unknown)}")
 
@@ -208,7 +219,11 @@ def _positive_int(value: Any, where: str) -> int:
 def _http_url(url: str, where: str, allow_http: bool) -> None:
     from urllib.parse import urlparse
 
-    parsed = urlparse(url)
+    try:
+        parsed = urlparse(url)
+        parsed.port  # noqa: B018 - raises ValueError for a port that is not a number
+    except ValueError as exc:  # "http://[::1" and similar
+        raise ConfigError(f"{where}: not a valid URL: {exc}") from None
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         raise ConfigError(f"{where}: expected an http or https URL")
     if parsed.scheme == "http" and parsed.hostname not in LOCAL_HOSTS and not allow_http:
@@ -291,12 +306,17 @@ def _server(data: Any, i: int) -> ServerConfig:
         s.timeout = float(
             _expect(data["timeout"], (int, float), f"{where}.timeout", "a number of seconds")
         )
+        if s.timeout <= 0:
+            raise ConfigError(f"{where}.timeout: expected a positive number of seconds")
     if has_cmd:
         cmd = data["command"]
         if isinstance(cmd, str):
             import shlex
 
-            cmd = shlex.split(cmd)
+            try:
+                cmd = shlex.split(cmd)
+            except ValueError as exc:  # an unclosed quote, for example
+                raise ConfigError(f"{where}.command: cannot split {cmd!r}: {exc}") from None
         s.command = _str_list(cmd, f"{where}.command")
         if not s.command:
             raise ConfigError(f"{where}.command: must not be empty")
@@ -366,7 +386,7 @@ def parse(data: Any, source: str = "", dry_run: bool = False) -> RunConfig:
             raise ConfigError("servers: expected a non-empty list")
         servers = [_server(s, i) for i, s in enumerate(servers_raw)]
         names = [s.name for s in servers]
-        dupes = sorted({n for n in names if names.count(n) > 1})
+        dupes = sorted(n for n, count in Counter(names).items() if count > 1)
         if dupes:
             raise ConfigError(f"servers: duplicate name(s) {', '.join(dupes)}")
         return RunConfig(

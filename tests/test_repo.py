@@ -18,6 +18,7 @@ SKIP_DIRS = {
     ".ruff_cache",
     "__pycache__",
     "garak-mcp-report",
+    ".hypothesis",
 }
 TEXT_SUFFIXES = {".md", ".py", ".toml", ".yml", ".yaml", ".json", ".txt", ".cfg", ""}
 
@@ -188,3 +189,26 @@ def test_actions_are_pinned_by_sha():
         for line in read(wf).splitlines():
             if "uses:" in line:
                 assert re.search(r"@[0-9a-f]{40} # v", line), f"{wf.name}: {line.strip()}"
+
+
+def test_readme_quick_start_is_what_ci_runs():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "readme_quickstart", ROOT / "scripts" / "readme_quickstart.py"
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    lines = mod.quickstart(read(ROOT / "README.md"))
+    assert lines[0].startswith("python3 -m venv .venv")
+    assert any(mod.INSTALL_URL in line for line in lines)
+    assert lines[-1].startswith("garak-mcp run --dry-run --probes test.Test")
+    script = mod.as_script(lines, ROOT)
+    assert mod.INSTALL_URL not in script and f'"{ROOT}"' in script
+    ci = read(ROOT / ".github" / "workflows" / "ci.yml")
+    assert "scripts/readme_quickstart.py" in ci
+
+
+def test_readme_has_troubleshooting():
+    readme = read(ROOT / "README.md")
+    assert "## Troubleshooting" in readme

@@ -16,15 +16,9 @@ Shipped as `run --with-probe-detectors` ([#1](https://github.com/basitalisandhu/
 - The check lives in `trace.py` as a pure function with tests; the detector class only binds it.
 - The README's configuration and detectors tables gain a row each.
 
-## 3. `garak-mcp summarise REPORT`
+## 3. `garak-mcp summarise REPORT` (done)
 
-**Context.** `summary.py` can summarise any report the runner wrote, but there is no command for an existing report.
-
-**Acceptance criteria.**
-
-- `garak-mcp summarise path/to/report.jsonl [--threshold X] [-o DIR]` writes `summary.json` and `summary.md` without running anything.
-- Exit code 2 for a missing or non-garak file, with the message from `ReportError`.
-- Tests reuse the report builder in `tests/test_summary.py`.
+Shipped in 0.3.0 as `garak-mcp summarise REPORT [-o DIR] [--threshold X] [--fail-on-hit]` ([#3](https://github.com/basitalisandhu/garak-mcp-probes/issues/3)).
 
 ## 4. Per-call detail in `summary.md`
 

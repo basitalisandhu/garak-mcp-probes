@@ -6,6 +6,25 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-28
+
+### Added
+
+- `garak-mcp summarise REPORT [-o DIR] [--threshold X] [--fail-on-hit]` (also spelt `summarize`) writes `summary.json` and `summary.md` for an existing garak report without running anything; a missing, unreadable or non-garak file exits 2 with a one-line message (#3).
+- README: a Troubleshooting section, and a CI job that follows the quick start exactly in a fresh virtual environment.
+- Fuzz and property tests (Hypothesis) for the configuration loader, the report reader, model replies, tool-call arguments and command-line values, and scaling tests that fail on quadratic work.
+
+### Fixed
+
+- A tool call whose arguments were nested a few thousand levels deep crashed the run with `RecursionError` inside the `ArgumentContains` detector; the argument walk is now iterative and linear in the size of the arguments (it was quadratic in the nesting depth).
+- Configuration files that were not UTF-8, JSON or YAML nested too deeply, a `command` string with an unclosed quote, a malformed URL such as `http://[::1`, or YAML keys of mixed types (`1:` next to `name:`) ended in a traceback; each is now a `ConfigError` naming the file and key.
+- `NaN` and infinite numbers, and a zero or negative `servers[].timeout`, were accepted; they are now rejected with the key path.
+- A model reply whose `tool_calls` was not a list, or whose function name was not a string, raised `TypeError` mid-run; it is now a model error recorded in the trace (`stopped: model_error`).
+- Tool-call arguments or model responses nested too deeply to decode are recorded as an error instead of raising `RecursionError`.
+- The report reader no longer raises on non-UTF-8 files, a directory passed as the report, outputs that are not a list, or detector scores that are not numbers (they are skipped).
+- `--threshold` accepts only a number from 0 to 1; `nan` and values outside that range exit 2.
+- The duplicate server name check was quadratic in the number of servers.
+
 ## [0.2.0] - 2026-10-20
 
 ### Added
@@ -35,6 +54,7 @@ All notable changes to this project are documented here. The format follows
 
 Tested against garak 0.17.0 and mcp 2.3.0.
 
-[Unreleased]: https://github.com/basitalisandhu/garak-mcp-probes/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/basitalisandhu/garak-mcp-probes/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/basitalisandhu/garak-mcp-probes/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/basitalisandhu/garak-mcp-probes/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/basitalisandhu/garak-mcp-probes/releases/tag/v0.1.0
