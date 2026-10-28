@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-29
+
+### Fixed
+
+- A deeply nested JSON run config exits with "not valid JSON: nested too deeply" on every supported Python, and deep JSON in a report line, model response or tool arguments gets the same handling as before. Python 3.14 no longer raises `RecursionError` from `json.loads` at the old depth, so JSON is now checked for nesting first (limit 200 levels).
+- CI tests Python 3.14.
+
 ## [0.3.0] - 2026-10-28
 
 ### Added
@@ -54,7 +61,8 @@ All notable changes to this project are documented here. The format follows
 
 Tested against garak 0.17.0 and mcp 2.3.0.
 
-[Unreleased]: https://github.com/basitalisandhu/garak-mcp-probes/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/basitalisandhu/garak-mcp-probes/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/basitalisandhu/garak-mcp-probes/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/basitalisandhu/garak-mcp-probes/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/basitalisandhu/garak-mcp-probes/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/basitalisandhu/garak-mcp-probes/releases/tag/v0.1.0

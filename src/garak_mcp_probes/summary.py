@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from . import _jsondepth
 from .trace import from_message
 
 ATTEMPT_COMPLETE = 2
@@ -30,7 +31,7 @@ def _entries(path: Path) -> list[dict[str, Any]]:
                 if not line.strip():
                     continue
                 try:
-                    entry = json.loads(line)
+                    entry = _jsondepth.loads(line)
                 except (ValueError, RecursionError) as exc:
                     raise ReportError(f"{path}: line {n} is not JSON") from exc
                 if isinstance(entry, dict):
